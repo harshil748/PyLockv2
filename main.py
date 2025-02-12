@@ -342,11 +342,11 @@ class PasswordManagerApp:
 
         self.root = tk.Tk()
         self.root.title("Password Manager")
-        self.root.geometry("400x300")
+        self.root.geometry("1080x720")
         self.root.resizable(False, False)
 
         style = ttk.Style()
-        style.theme_use("vista")
+        style.theme_use("aqua")
 
         self.show_login_window()
 
