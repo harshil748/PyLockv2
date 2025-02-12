@@ -346,7 +346,7 @@ class PasswordManagerApp:
         self.root.resizable(False, False)
 
         style = ttk.Style()
-        style.theme_use("clam")
+        style.theme_use("vista")
 
         self.show_login_window()
 
