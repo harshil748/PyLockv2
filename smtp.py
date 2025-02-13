@@ -18,7 +18,7 @@ def generate_verification_code():
 
 # Function to send an email with the verification code
 def send_verification_email(receiver_email, code):
-    subject = "Your Password Manager Verification Code"
+    subject = "Your PyLock Password Manager Verification Code"
     body = f"Your verification code is: {code}"
 
     msg = MIMEMultipart()
