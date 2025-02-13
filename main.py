@@ -343,7 +343,7 @@ class PasswordManagerApp:
         self.root = tk.Tk()
         self.root.title("Password Manager")
         self.root.geometry("1080x720")
-        self.root.resizable(False, False)
+        self.root.resizable(True, True)
 
         style = ttk.Style()
         style.theme_use("aqua")
