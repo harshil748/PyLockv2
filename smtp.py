@@ -25,8 +25,8 @@ def send_verification_email(receiver_email, code):
     msg.attach(MIMEText(body, "plain"))
 
     try:
-        server = smtplib.SMTP("smtp.gmail.com", 587)  
-        server.starttls()  
+        server = smtplib.SMTP("smtp.gmail.com", 587)
+        server.starttls()
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
         server.sendmail(SENDER_EMAIL, receiver_email, msg.as_string())
         server.quit()
@@ -41,7 +41,7 @@ class EmailVerificationApp:
         self.root = root
         self.root.title("Email Verification")
 
-        self.verification_code = None 
+        self.verification_code = None
 
         tk.Label(root, text="Enter your email:").pack(pady=5)
         self.email_entry = tk.Entry(root, width=30)
@@ -75,6 +75,7 @@ class EmailVerificationApp:
             messagebox.showinfo("Success", "Email verified successfully!")
         else:
             messagebox.showerror("Error", "Invalid verification code!")
+
 
 root = tk.Tk()
 app = EmailVerificationApp(root)
