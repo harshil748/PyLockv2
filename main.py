@@ -10,8 +10,15 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 import base64
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 backend = default_backend()
+
+# Email configuration
+SENDER_EMAIL = "sgp.noreplydce@gmail.com"
+SENDER_PASSWORD = "haub ylen jpof ypse"
 
 
 class DatabaseManager:
@@ -21,6 +28,8 @@ class DatabaseManager:
 
     def create_tables(self):
         cursor = self.conn.cursor()
+        
+        # Create users table with verification_code column
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS users (
@@ -30,10 +39,19 @@ class DatabaseManager:
                 salt TEXT,
                 email TEXT,
                 phone TEXT,
-                verified INTEGER DEFAULT 0
+                verified INTEGER DEFAULT 0,
+                verification_code TEXT
             )
-        """
+            """
         )
+        
+        # Make sure the verification_code column exists (for older databases)
+        try:
+            cursor.execute("ALTER TABLE users ADD COLUMN verification_code TEXT")
+        except sqlite3.OperationalError:
+            # Column already exists, ignore
+            pass
+        
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS passwords (
@@ -73,6 +91,39 @@ class AuthManager:
     @staticmethod
     def generate_verification_code():
         return "".join(secrets.choice(string.digits) for _ in range(6))
+
+    @staticmethod
+    def send_verification_email(receiver_email, code):
+        subject = "Your Password Manager Verification Code"
+        body = f"""
+        Your verification code is: {code}
+        
+        Please enter this code to verify your account.
+        If you did not request this code, please ignore this email.
+        """
+
+        msg = MIMEMultipart()
+        msg["From"] = SENDER_EMAIL
+        msg["To"] = receiver_email
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body, "plain"))
+
+        try:
+            print(f"Attempting to send email to {receiver_email}")
+            server = smtplib.SMTP("smtp.gmail.com", 587)
+            server.ehlo()  # Identify to SMTP server
+            server.starttls()  # Secure connection
+            print("Logging into SMTP server...")
+            server.login(SENDER_EMAIL, SENDER_PASSWORD)
+            print("Sending email...")
+            server.send_message(msg)
+            server.quit()
+            print("Email sent successfully")
+            return True
+        except Exception as e:
+            print(f"Email failed to send: {e}")
+            messagebox.showerror("Error", f"Failed to send verification email: {str(e)}")
+            return False
 
 
 class EncryptionManager:
@@ -128,8 +179,8 @@ class LoginWindow:
 
         user = self.db_manager.execute_query(
             """
-            SELECT id, password_hash, salt FROM users WHERE username = ?
-        """,
+            SELECT id, password_hash, salt, verified, email FROM users WHERE username = ?
+            """,
             (username,),
         ).fetchone()
 
@@ -139,6 +190,17 @@ class LoginWindow:
             derived_key, _ = self.auth_manager.hash_password(password, salt)
 
             if derived_key == stored_key:
+                if user[3] == 0:  # If not verified
+                    verification_window = tk.Toplevel(self.master)
+                    VerificationWindow(
+                        verification_window, 
+                        self.db_manager, 
+                        self.auth_manager,
+                        username, 
+                        user[4],  # email
+                        lambda: self.on_login_success(user)
+                    )
+                    return
                 self.on_login_success(user)
                 return
 
@@ -147,6 +209,127 @@ class LoginWindow:
     def open_registration(self):
         registration_window = tk.Toplevel(self.master)
         RegistrationWindow(registration_window, self.db_manager, self.auth_manager)
+
+
+class VerificationWindow:
+    def __init__(self, master, db_manager, auth_manager, username, email, on_verify_success):
+        self.master = master
+        self.db_manager = db_manager
+        self.auth_manager = auth_manager
+        self.username = username
+        self.email = email
+        self.on_verify_success = on_verify_success
+
+        # Set window properties
+        self.master.title("Verify Account")
+        self.master.geometry("400x250")
+        self.frame = ttk.Frame(self.master, padding="20")
+        self.frame.pack(fill=tk.BOTH, expand=True)
+
+        # Create status variable
+        self.status_var = tk.StringVar()
+        self.status_var.set("Sending verification code...")
+
+        ttk.Label(
+            self.frame, 
+            text="Email Verification", 
+            font=("Arial", 16, "bold")
+        ).pack(pady=(0, 20))
+
+        ttk.Label(
+            self.frame, 
+            text=f"A verification code has been sent to:\n{email}"
+        ).pack(pady=(0, 20))
+
+        code_frame = ttk.Frame(self.frame)
+        code_frame.pack(fill=tk.X, pady=10)
+
+        ttk.Label(code_frame, text="Enter Code:").pack(side=tk.LEFT, padx=5)
+        self.code_entry = ttk.Entry(code_frame, width=10, font=("Arial", 14))
+        self.code_entry.pack(side=tk.LEFT, padx=5)
+        
+        button_frame = ttk.Frame(self.frame)
+        button_frame.pack(fill=tk.X, pady=20)
+
+        ttk.Button(
+            button_frame, 
+            text="Verify", 
+            command=self.verify
+        ).pack(side=tk.RIGHT, padx=5)
+        
+        ttk.Button(
+            button_frame, 
+            text="Resend Code", 
+            command=self.resend_code
+        ).pack(side=tk.RIGHT, padx=5)
+        
+        # Status label
+        self.status_label = ttk.Label(
+            self.frame, 
+            textvariable=self.status_var,
+            foreground="gray"
+        )
+        self.status_label.pack(pady=10)
+        
+        # Generate and send verification code
+        self.master.after(500, self.send_verification)
+
+    def send_verification(self):
+        verification_code = self.auth_manager.generate_verification_code()
+        print(f"Generated verification code: {verification_code} for user {self.username}")
+        
+        # Save code in database
+        self.db_manager.execute_query(
+            """
+            UPDATE users SET verification_code = ? WHERE username = ?
+            """,
+            (verification_code, self.username),
+        )
+        
+        # Send email
+        success = self.auth_manager.send_verification_email(self.email, verification_code)
+        
+        if success:
+            self.status_var.set("Verification code sent! Please check your email.")
+        else:
+            self.status_var.set("Failed to send code. Click Resend to try again.")
+
+    def resend_code(self):
+        self.status_var.set("Sending new verification code...")
+        self.master.update_idletasks()
+        self.send_verification()
+
+    def verify(self):
+        code = self.code_entry.get().strip()
+        if not code:
+            messagebox.showerror("Error", "Please enter the verification code")
+            return
+            
+        print(f"Checking verification code: {code} for user {self.username}")
+        
+        user = self.db_manager.execute_query(
+            """
+            SELECT id, verification_code FROM users WHERE username = ?
+            """,
+            (self.username,),
+        ).fetchone()
+        
+        if user and user[1] == code:
+            print(f"Verification successful for user {self.username}")
+            self.db_manager.execute_query(
+                """
+                UPDATE users SET verified = 1 WHERE id = ?
+                """,
+                (user[0],),
+            )
+            messagebox.showinfo("Success", "Account verified successfully!")
+            self.master.destroy()
+            self.on_verify_success()
+        else:
+            stored_code = user[1] if user and user[1] else "No code found"
+            print(f"Verification failed. Entered: {code}, Stored: {stored_code}")
+            messagebox.showerror("Error", "Invalid verification code")
+            self.status_var.set("Invalid code. Please try again.")
 
 
 class RegistrationWindow:
@@ -194,20 +377,41 @@ class RegistrationWindow:
             return
 
         derived_key, salt = self.auth_manager.hash_password(password)
+        verification_code = self.auth_manager.generate_verification_code()
 
         try:
+            # Insert the user without verification code first
             self.db_manager.execute_query(
                 """
-                INSERT INTO users (username, password_hash, salt, email, phone)
-                VALUES (?, ?, ?, ?, ?)
-            """,
+                INSERT INTO users (username, password_hash, salt, email, phone, verified)
+                VALUES (?, ?, ?, ?, ?, 0)
+                """,
                 (username, derived_key, salt, email, phone),
             )
-
-            messagebox.showinfo(
-                "Success", "Registration successful! Please verify your account."
+            
+            # Generate verification code and update the user
+            verification_code = self.auth_manager.generate_verification_code()
+            self.db_manager.execute_query(
+                """
+                UPDATE users SET verification_code = ? WHERE username = ?
+                """,
+                (verification_code, username),
             )
+            
+            # Close registration window
             self.master.destroy()
+            
+            # Open verification window immediately
+            verification_window = tk.Toplevel(self.master.master)
+            VerificationWindow(
+                verification_window, 
+                self.db_manager, 
+                self.auth_manager, 
+                username, 
+                email, 
+                lambda: messagebox.showinfo("Success", "You can now log in with your credentials.")
+            )
+            
         except sqlite3.IntegrityError:
             messagebox.showerror("Error", "Username already exists")
 
