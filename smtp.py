@@ -1,10 +1,9 @@
 import smtplib
 import random
 import string
-import tkinter as tk
-from tkinter import messagebox, ttk
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+import time
 
 SENDER_EMAIL = "sgp.noreplydce@gmail.com"
 SENDER_PASSWORD = "haub ylen jpof ypse"
@@ -36,104 +35,66 @@ def send_verification_email(receiver_email, code):
         return False
 
 
-class EmailVerificationApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Email Verification")
-        self.root.geometry("400x400")
-        self.root.resizable(False, False)
+def main():
+    print("Two-Factor Email Verification System")
 
-        # Set style
-        self.style = ttk.Style()
-        self.style.configure("TFrame", background="#f0f0f0")
-        self.style.configure("TLabel", background="#f0f0f0", font=("Arial", 12))
-        self.style.configure("TEntry", font=("Arial", 12))
-        self.style.configure("TButton", font=("Arial", 12, "bold"))
+    # Get email address from user
+    email = input("\nEnter your email address: ")
+    if not email:
+        print("Error: Email address cannot be empty!")
+        return
 
-        # Create main frame
-        self.main_frame = ttk.Frame(root, padding="20 20 20 20")
-        self.main_frame.pack(fill=tk.BOTH, expand=True)
+    print("\nSending verification code...")
 
-        self.verification_code = None
+    # Generate and send verification code
+    verification_code = generate_verification_code()
+    success = send_verification_email(email, verification_code)
+    last_sent_time = time.time()
 
-        # App title
-        ttk.Label(
-            self.main_frame,
-            text="Email Verification System",
-            font=("Arial", 16, "bold"),
-        ).pack(pady=(0, 20))
+    if not success:
+        print("Error: Failed to send email. Please try again.")
+        return
 
-        # Email frame
-        self.email_frame = ttk.Frame(self.main_frame)
-        self.email_frame.pack(fill=tk.X, pady=10)
+    print("Success: Verification code sent to your email!")
 
-        ttk.Label(self.email_frame, text="Email Address:").pack(
-            anchor=tk.W, pady=(0, 5)
+    verified = False
+    while not verified:
+        # Get verification code from user
+        print("\nPlease check your email for the verification code.")
+        print(
+            "Enter the verification code or 'r' to resend (can resend after 30 seconds):"
         )
+        user_input = input("> ")
 
-        self.email_entry = ttk.Entry(self.email_frame, width=40)
-        self.email_entry.pack(fill=tk.X)
+        if user_input.lower() == "r":
+            current_time = time.time()
+            time_elapsed = current_time - last_sent_time
 
-        self.send_button = ttk.Button(
-            self.email_frame, text="Send Verification Code", command=self.send_code
-        )
-        self.send_button.pack(anchor=tk.E, pady=(10, 0))
+            if time_elapsed < 30:
+                print(
+                    f"Please wait {int(30 - time_elapsed)} more seconds before requesting a new code."
+                )
+                continue
 
-        # Code verification frame
-        self.code_frame = ttk.Frame(self.main_frame)
-        self.code_frame.pack(fill=tk.X, pady=20)
+            print("\nResending verification code...")
+            verification_code = generate_verification_code()
+            success = send_verification_email(email, verification_code)
+            last_sent_time = current_time
 
-        ttk.Label(self.code_frame, text="Verification Code:").pack(
-            anchor=tk.W, pady=(0, 5)
-        )
-
-        self.code_entry = ttk.Entry(self.code_frame, width=10, font=("Arial", 14))
-        self.code_entry.pack(pady=5)
-
-        self.verify_button = ttk.Button(
-            self.code_frame, text="Verify Code", command=self.verify_code
-        )
-        self.verify_button.pack(pady=(10, 0))
-
-        # Status indicator
-        self.status_var = tk.StringVar()
-        self.status_label = ttk.Label(
-            self.main_frame, textvariable=self.status_var, foreground="gray"
-        )
-        self.status_label.pack(pady=20)
-        self.status_var.set("Enter your email and request a verification code")
-
-    def send_code(self):
-        email = self.email_entry.get()
-        if not email:
-            messagebox.showerror("Error", "Please enter an email!")
-            return
-
-        self.status_var.set("Sending verification code...")
-        self.root.update_idletasks()
-
-        self.verification_code = generate_verification_code()
-        success = send_verification_email(email, self.verification_code)
-
-        if success:
-            messagebox.showinfo("Success", "Verification code sent to your email!")
-            self.status_var.set("Code sent! Please check your email")
-            self.code_entry.focus()
+            if success:
+                print("Success: New verification code sent to your email!")
+            else:
+                print("Error: Failed to send email. Please try again.")
         else:
-            messagebox.showerror("Error", "Failed to send email")
-            self.status_var.set("Failed to send code. Please try again.")
-
-    def verify_code(self):
-        user_code = self.code_entry.get()
-        if user_code == self.verification_code:
-            messagebox.showinfo("Success", "Email verified successfully!")
-            self.status_var.set("Email verified successfully!")
-        else:
-            messagebox.showerror("Error", "Invalid verification code!")
-            self.status_var.set("Invalid code. Please try again.")
+            # Verify the code
+            if user_input == verification_code:
+                print("\nSuccess: Email verified successfully!")
+                verified = True
+            else:
+                print(
+                    "\nError: Invalid verification code. Try again or request a new code."
+                )
 
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = EmailVerificationApp(root)
-    root.mainloop()
+    main()
