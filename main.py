@@ -29,7 +29,7 @@ class DatabaseManager:
     def create_tables(self):
         cursor = self.conn.cursor()
         
-        # Create users table with verification_code column
+        # Create users table with verification_code and special_sentence columns
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS users (
@@ -40,14 +40,21 @@ class DatabaseManager:
                 email TEXT,
                 phone TEXT,
                 verified INTEGER DEFAULT 0,
-                verification_code TEXT
+                verification_code TEXT,
+                special_sentence TEXT
             )
             """
         )
         
-        # Make sure the verification_code column exists (for older databases)
+        # Make sure the verification_code and special_sentence columns exist (for older databases)
         try:
             cursor.execute("ALTER TABLE users ADD COLUMN verification_code TEXT")
+        except sqlite3.OperationalError:
+            # Column already exists, ignore
+            pass
+        
+        try:
+            cursor.execute("ALTER TABLE users ADD COLUMN special_sentence TEXT")
         except sqlite3.OperationalError:
             # Column already exists, ignore
             pass
@@ -125,6 +132,43 @@ class AuthManager:
             messagebox.showerror("Error", f"Failed to send verification email: {str(e)}")
             return False
 
+    @staticmethod
+    def generate_special_sentence():
+        words = ["apple", "banana", "cherry", "date", "blueberry", "fig", "grape", "honeydew"]
+        return " ".join(secrets.choice(words) for _ in range(6))
+
+    @staticmethod
+    def send_special_sentence_email(receiver_email, sentence):
+        subject = "Your Password Manager Special Sentence"
+        body = f"""
+        Your special sentence is: {sentence}
+        
+        Please store this sentence securely. You can use it to reset your password if you forget it.
+        """
+
+        msg = MIMEMultipart()
+        msg["From"] = SENDER_EMAIL
+        msg["To"] = receiver_email
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body, "plain"))
+
+        try:
+            print(f"Attempting to send email to {receiver_email}")
+            server = smtplib.SMTP("smtp.gmail.com", 587)
+            server.ehlo()  # Identify to SMTP server
+            server.starttls()  # Secure connection
+            print("Logging into SMTP server...")
+            server.login(SENDER_EMAIL, SENDER_PASSWORD)
+            print("Sending email...")
+            server.send_message(msg)
+            server.quit()
+            print("Email sent successfully")
+            return True
+        except Exception as e:
+            print(f"Email failed to send: {e}")
+            messagebox.showerror("Error", f"Failed to send special sentence email: {str(e)}")
+            return False
+
 
 class EncryptionManager:
     @staticmethod
@@ -172,6 +216,9 @@ class LoginWindow:
         ttk.Button(self.frame, text="Register", command=self.open_registration).grid(
             column=0, row=2, sticky=tk.W, pady=10
         )
+        ttk.Button(self.frame, text="Forgot Password", command=self.open_reset_password).grid(
+            column=1, row=3, sticky=tk.E, pady=10
+        )
 
     def login(self):
         username = self.username_entry.get()
@@ -209,6 +256,10 @@ class LoginWindow:
     def open_registration(self):
         registration_window = tk.Toplevel(self.master)
         RegistrationWindow(registration_window, self.db_manager, self.auth_manager)
+
+    def open_reset_password(self):
+        reset_password_window = tk.Toplevel(self.master)
+        ResetPasswordWindow(reset_password_window, self.db_manager, self.auth_manager)
 
 
 class VerificationWindow:
@@ -378,15 +429,16 @@ class RegistrationWindow:
 
         derived_key, salt = self.auth_manager.hash_password(password)
         verification_code = self.auth_manager.generate_verification_code()
+        special_sentence = self.auth_manager.generate_special_sentence()
 
         try:
             # Insert the user without verification code first
             self.db_manager.execute_query(
                 """
-                INSERT INTO users (username, password_hash, salt, email, phone, verified)
-                VALUES (?, ?, ?, ?, ?, 0)
+                INSERT INTO users (username, password_hash, salt, email, phone, verified, special_sentence)
+                VALUES (?, ?, ?, ?, ?, 0, ?)
                 """,
-                (username, derived_key, salt, email, phone),
+                (username, derived_key, salt, email, phone, special_sentence),
             )
             
             # Generate verification code and update the user
@@ -397,6 +449,9 @@ class RegistrationWindow:
                 """,
                 (verification_code, username),
             )
+            
+            # Send special sentence email
+            self.auth_manager.send_special_sentence_email(email, special_sentence)
             
             # Close registration window
             self.master.destroy()
@@ -414,6 +469,64 @@ class RegistrationWindow:
             
         except sqlite3.IntegrityError:
             messagebox.showerror("Error", "Username already exists")
+
+
+class ResetPasswordWindow:
+    def __init__(self, master, db_manager, auth_manager):
+        self.master = master
+        self.db_manager = db_manager
+        self.auth_manager = auth_manager
+
+        self.master.title("Reset Password")
+        self.frame = ttk.Frame(self.master, padding="10")
+        self.frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+
+        ttk.Label(self.frame, text="Username:").grid(
+            column=0, row=0, sticky=tk.W, pady=5
+        )
+        self.username_entry = ttk.Entry(self.frame, width=30)
+        self.username_entry.grid(column=1, row=0, sticky=(tk.W, tk.E), pady=5)
+
+        ttk.Label(self.frame, text="Special Sentence:").grid(
+            column=0, row=1, sticky=tk.W, pady=5
+        )
+        self.sentence_entry = ttk.Entry(self.frame, width=30)
+        self.sentence_entry.grid(column=1, row=1, sticky=(tk.W, tk.E), pady=5)
+
+        ttk.Label(self.frame, text="New Password:").grid(
+            column=0, row=2, sticky=tk.W, pady=5
+        )
+        self.new_password_entry = ttk.Entry(self.frame, show="*", width=30)
+        self.new_password_entry.grid(column=1, row=2, sticky=(tk.W, tk.E), pady=5)
+
+        ttk.Button(self.frame, text="Reset Password", command=self.reset_password).grid(
+            column=1, row=3, sticky=tk.E, pady=10
+        )
+
+    def reset_password(self):
+        username = self.username_entry.get()
+        special_sentence = self.sentence_entry.get()
+        new_password = self.new_password_entry.get()
+
+        user = self.db_manager.execute_query(
+            """
+            SELECT id, special_sentence FROM users WHERE username = ?
+            """,
+            (username,),
+        ).fetchone()
+
+        if user and user[1] == special_sentence:
+            derived_key, salt = self.auth_manager.hash_password(new_password)
+            self.db_manager.execute_query(
+                """
+                UPDATE users SET password_hash = ?, salt = ? WHERE id = ?
+                """,
+                (derived_key, salt, user[0]),
+            )
+            messagebox.showinfo("Success", "Password reset successfully!")
+            self.master.destroy()
+        else:
+            messagebox.showerror("Error", "Invalid username or special sentence")
 
 
 class MainWindow:
