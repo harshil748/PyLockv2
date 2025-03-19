@@ -28,7 +28,7 @@ class DatabaseManager:
 
     def create_tables(self):
         cursor = self.conn.cursor()
-        
+
         # Create users table with verification_code and special_sentence columns
         cursor.execute(
             """
@@ -45,20 +45,20 @@ class DatabaseManager:
             )
             """
         )
-        
+
         # Make sure the verification_code and special_sentence columns exist (for older databases)
         try:
             cursor.execute("ALTER TABLE users ADD COLUMN verification_code TEXT")
         except sqlite3.OperationalError:
             # Column already exists, ignore
             pass
-        
+
         try:
             cursor.execute("ALTER TABLE users ADD COLUMN special_sentence TEXT")
         except sqlite3.OperationalError:
             # Column already exists, ignore
             pass
-        
+
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS passwords (
@@ -129,12 +129,23 @@ class AuthManager:
             return True
         except Exception as e:
             print(f"Email failed to send: {e}")
-            messagebox.showerror("Error", f"Failed to send verification email: {str(e)}")
+            messagebox.showerror(
+                "Error", f"Failed to send verification email: {str(e)}"
+            )
             return False
 
     @staticmethod
     def generate_special_sentence():
-        words = ["apple", "banana", "cherry", "date", "blueberry", "fig", "grape", "honeydew"]
+        words = [
+            "apple",
+            "banana",
+            "cherry",
+            "date",
+            "blueberry",
+            "fig",
+            "grape",
+            "honeydew",
+        ]
         return " ".join(secrets.choice(words) for _ in range(6))
 
     @staticmethod
@@ -166,7 +177,9 @@ class AuthManager:
             return True
         except Exception as e:
             print(f"Email failed to send: {e}")
-            messagebox.showerror("Error", f"Failed to send special sentence email: {str(e)}")
+            messagebox.showerror(
+                "Error", f"Failed to send special sentence email: {str(e)}"
+            )
             return False
 
 
@@ -216,9 +229,9 @@ class LoginWindow:
         ttk.Button(self.frame, text="Register", command=self.open_registration).grid(
             column=0, row=2, sticky=tk.W, pady=10
         )
-        ttk.Button(self.frame, text="Forgot Password", command=self.open_reset_password).grid(
-            column=1, row=3, sticky=tk.E, pady=10
-        )
+        ttk.Button(
+            self.frame, text="Forgot Password", command=self.open_reset_password
+        ).grid(column=1, row=3, sticky=tk.E, pady=10)
 
     def login(self):
         username = self.username_entry.get()
@@ -240,12 +253,12 @@ class LoginWindow:
                 if user[3] == 0:  # If not verified
                     verification_window = tk.Toplevel(self.master)
                     VerificationWindow(
-                        verification_window, 
-                        self.db_manager, 
+                        verification_window,
+                        self.db_manager,
                         self.auth_manager,
-                        username, 
+                        username,
                         user[4],  # email
-                        lambda: self.on_login_success(user)
+                        lambda: self.on_login_success(user),
                     )
                     return
                 self.on_login_success(user)
@@ -263,7 +276,9 @@ class LoginWindow:
 
 
 class VerificationWindow:
-    def __init__(self, master, db_manager, auth_manager, username, email, on_verify_success):
+    def __init__(
+        self, master, db_manager, auth_manager, username, email, on_verify_success
+    ):
         self.master = master
         self.db_manager = db_manager
         self.auth_manager = auth_manager
@@ -282,14 +297,11 @@ class VerificationWindow:
         self.status_var.set("Sending verification code...")
 
         ttk.Label(
-            self.frame, 
-            text="Email Verification", 
-            font=("Arial", 16, "bold")
+            self.frame, text="Email Verification", font=("Arial", 16, "bold")
         ).pack(pady=(0, 20))
 
         ttk.Label(
-            self.frame, 
-            text=f"A verification code has been sent to:\n{email}"
+            self.frame, text=f"A verification code has been sent to:\n{email}"
         ).pack(pady=(0, 20))
 
         code_frame = ttk.Frame(self.frame)
@@ -298,37 +310,33 @@ class VerificationWindow:
         ttk.Label(code_frame, text="Enter Code:").pack(side=tk.LEFT, padx=5)
         self.code_entry = ttk.Entry(code_frame, width=10, font=("Arial", 14))
         self.code_entry.pack(side=tk.LEFT, padx=5)
-        
+
         button_frame = ttk.Frame(self.frame)
         button_frame.pack(fill=tk.X, pady=20)
 
-        ttk.Button(
-            button_frame, 
-            text="Verify", 
-            command=self.verify
-        ).pack(side=tk.RIGHT, padx=5)
-        
-        ttk.Button(
-            button_frame, 
-            text="Resend Code", 
-            command=self.resend_code
-        ).pack(side=tk.RIGHT, padx=5)
-        
+        ttk.Button(button_frame, text="Verify", command=self.verify).pack(
+            side=tk.RIGHT, padx=5
+        )
+
+        ttk.Button(button_frame, text="Resend Code", command=self.resend_code).pack(
+            side=tk.RIGHT, padx=5
+        )
+
         # Status label
         self.status_label = ttk.Label(
-            self.frame, 
-            textvariable=self.status_var,
-            foreground="gray"
+            self.frame, textvariable=self.status_var, foreground="gray"
         )
         self.status_label.pack(pady=10)
-        
+
         # Generate and send verification code
         self.master.after(500, self.send_verification)
 
     def send_verification(self):
         verification_code = self.auth_manager.generate_verification_code()
-        print(f"Generated verification code: {verification_code} for user {self.username}")
-        
+        print(
+            f"Generated verification code: {verification_code} for user {self.username}"
+        )
+
         # Save code in database
         self.db_manager.execute_query(
             """
@@ -336,10 +344,12 @@ class VerificationWindow:
             """,
             (verification_code, self.username),
         )
-        
+
         # Send email
-        success = self.auth_manager.send_verification_email(self.email, verification_code)
-        
+        success = self.auth_manager.send_verification_email(
+            self.email, verification_code
+        )
+
         if success:
             self.status_var.set("Verification code sent! Please check your email.")
         else:
@@ -355,16 +365,16 @@ class VerificationWindow:
         if not code:
             messagebox.showerror("Error", "Please enter the verification code")
             return
-            
+
         print(f"Checking verification code: {code} for user {self.username}")
-        
+
         user = self.db_manager.execute_query(
             """
             SELECT id, verification_code, special_sentence FROM users WHERE username = ?
             """,
             (self.username,),
         ).fetchone()
-        
+
         if user and user[1] == code:
             print(f"Verification successful for user {self.username}")
             self.db_manager.execute_query(
@@ -373,11 +383,11 @@ class VerificationWindow:
                 """,
                 (user[0],),
             )
-            
+
             # Display special sentence in a new window
             special_sentence = user[2]
             self.display_special_sentence(special_sentence)
-            
+
             messagebox.showinfo("Success", "Account verified successfully!")
             self.master.destroy()
             self.on_verify_success()
@@ -386,40 +396,38 @@ class VerificationWindow:
             print(f"Verification failed. Entered: {code}, Stored: {stored_code}")
             messagebox.showerror("Error", "Invalid verification code")
             self.status_var.set("Invalid code. Please try again.")
-    
+
     def display_special_sentence(self, special_sentence):
         sentence_window = tk.Toplevel()
         sentence_window.title("Your Special Sentence")
         sentence_window.geometry("500x300")
-        
+
         frame = ttk.Frame(sentence_window, padding="20")
         frame.pack(fill=tk.BOTH, expand=True)
-        
+
         ttk.Label(
             frame,
             text="IMPORTANT: Save Your Special Sentence",
-            font=("Arial", 14, "bold")
+            font=("Arial", 14, "bold"),
         ).pack(pady=(0, 20))
-        
+
         ttk.Label(
             frame,
             text="This sentence can be used to reset your password if you forget it.\nPlease save it in a secure location.",
             wraplength=400,
-            justify=tk.CENTER
+            justify=tk.CENTER,
         ).pack(pady=(0, 20))
-        
+
         sentence_frame = ttk.Frame(frame)
         sentence_frame.pack(fill=tk.X, pady=10)
-        
+
         sentence_text = ttk.Entry(sentence_frame, width=40, font=("Arial", 12))
         sentence_text.insert(0, special_sentence)
         sentence_text.configure(state="readonly")
         sentence_text.pack(pady=10)
-        
+
         ttk.Button(
-            frame,
-            text="I've Saved My Sentence",
-            command=sentence_window.destroy
+            frame, text="I've Saved My Sentence", command=sentence_window.destroy
         ).pack(pady=20)
 
 
@@ -480,7 +488,7 @@ class RegistrationWindow:
                 """,
                 (username, derived_key, salt, email, phone, special_sentence),
             )
-            
+
             # Generate verification code and update the user
             verification_code = self.auth_manager.generate_verification_code()
             self.db_manager.execute_query(
@@ -489,24 +497,26 @@ class RegistrationWindow:
                 """,
                 (verification_code, username),
             )
-            
+
             # Comment out the email sending code - we'll display it after verification instead
             # self.auth_manager.send_special_sentence_email(email, special_sentence)
-            
+
             # Close registration window
             self.master.destroy()
-            
+
             # Open verification window immediately
             verification_window = tk.Toplevel(self.master.master)
             VerificationWindow(
-                verification_window, 
-                self.db_manager, 
-                self.auth_manager, 
-                username, 
-                email, 
-                lambda: messagebox.showinfo("Success", "You can now log in with your credentials.")
+                verification_window,
+                self.db_manager,
+                self.auth_manager,
+                username,
+                email,
+                lambda: messagebox.showinfo(
+                    "Success", "You can now log in with your credentials."
+                ),
             )
-            
+
         except sqlite3.IntegrityError:
             messagebox.showerror("Error", "Username already exists")
 
