@@ -360,7 +360,7 @@ class VerificationWindow:
         
         user = self.db_manager.execute_query(
             """
-            SELECT id, verification_code FROM users WHERE username = ?
+            SELECT id, verification_code, special_sentence FROM users WHERE username = ?
             """,
             (self.username,),
         ).fetchone()
@@ -373,6 +373,11 @@ class VerificationWindow:
                 """,
                 (user[0],),
             )
+            
+            # Display special sentence in a new window
+            special_sentence = user[2]
+            self.display_special_sentence(special_sentence)
+            
             messagebox.showinfo("Success", "Account verified successfully!")
             self.master.destroy()
             self.on_verify_success()
@@ -381,6 +386,41 @@ class VerificationWindow:
             print(f"Verification failed. Entered: {code}, Stored: {stored_code}")
             messagebox.showerror("Error", "Invalid verification code")
             self.status_var.set("Invalid code. Please try again.")
+    
+    def display_special_sentence(self, special_sentence):
+        sentence_window = tk.Toplevel()
+        sentence_window.title("Your Special Sentence")
+        sentence_window.geometry("500x300")
+        
+        frame = ttk.Frame(sentence_window, padding="20")
+        frame.pack(fill=tk.BOTH, expand=True)
+        
+        ttk.Label(
+            frame,
+            text="IMPORTANT: Save Your Special Sentence",
+            font=("Arial", 14, "bold")
+        ).pack(pady=(0, 20))
+        
+        ttk.Label(
+            frame,
+            text="This sentence can be used to reset your password if you forget it.\nPlease save it in a secure location.",
+            wraplength=400,
+            justify=tk.CENTER
+        ).pack(pady=(0, 20))
+        
+        sentence_frame = ttk.Frame(frame)
+        sentence_frame.pack(fill=tk.X, pady=10)
+        
+        sentence_text = ttk.Entry(sentence_frame, width=40, font=("Arial", 12))
+        sentence_text.insert(0, special_sentence)
+        sentence_text.configure(state="readonly")
+        sentence_text.pack(pady=10)
+        
+        ttk.Button(
+            frame,
+            text="I've Saved My Sentence",
+            command=sentence_window.destroy
+        ).pack(pady=20)
 
 
 class RegistrationWindow:
@@ -450,8 +490,8 @@ class RegistrationWindow:
                 (verification_code, username),
             )
             
-            # Send special sentence email
-            self.auth_manager.send_special_sentence_email(email, special_sentence)
+            # Comment out the email sending code - we'll display it after verification instead
+            # self.auth_manager.send_special_sentence_email(email, special_sentence)
             
             # Close registration window
             self.master.destroy()
