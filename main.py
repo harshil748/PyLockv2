@@ -600,18 +600,17 @@ class MainWindow:
         )
 
     def setup_retrieve_password_tab(self):
-        ttk.Label(self.retrieve_password_tab, text="Service:").grid(
-            column=0, row=0, sticky=tk.W, pady=5
-        )
-        self.retrieve_service_entry = ttk.Entry(self.retrieve_password_tab, width=30)
-        self.retrieve_service_entry.grid(column=1, row=0, sticky=(tk.W, tk.E), pady=5)
-
-        ttk.Button(
-            self.retrieve_password_tab, text="Retrieve", command=self.retrieve_password
-        ).grid(column=1, row=1, sticky=tk.E, pady=5)
-
-        self.retrieve_result = ttk.Label(self.retrieve_password_tab, text="")
-        self.retrieve_result.grid(column=0, row=2, columnspan=2, pady=10)
+        self.tree = ttk.Treeview(self.retrieve_password_tab, columns=("Service", "Username"), show="headings")
+        self.tree.heading("Service", text="Service")
+        self.tree.heading("Username", text="Username")
+        self.tree.bind("<Double-1>", self.retrieve_password)  # Bind double-click event
+        self.tree.grid(column=0, row=0, columnspan=2, sticky="nsew", pady=5)
+ 
+        self.retrieve_result = ttk.Label(self.retrieve_password_tab, text="", font=("Arial", 12))
+        self.retrieve_result.grid(column=0, row=1, columnspan=2, pady=10)
+ 
+        # Populate the treeview with stored passwords
+        self.populate_password_list()
 
     def generate_password(self):
         chars = string.ascii_letters + string.digits + "!@#$%^&*()"
@@ -641,18 +640,23 @@ class MainWindow:
         self.username_entry.delete(0, tk.END)
         self.password_entry.delete(0, tk.END)
 
-    def retrieve_password(self):
-        service = self.retrieve_service_entry.get()
+    def retrieve_password(self, event=None):
+        selected_item = self.tree.selection()
+        if not selected_item:
+            messagebox.showerror("Error", "Please select a service")
+            return
+ 
+        service, username = self.tree.item(selected_item, "values")
         result = self.db_manager.execute_query(
             """
-            SELECT username, password, iv FROM passwords
-            WHERE user_id = ? AND service = ?
-        """,
-            (self.user[0], service),
+            SELECT password, iv FROM passwords
+            WHERE user_id = ? AND service = ? AND username = ?
+            """,
+            (self.user[0], service, username),
         ).fetchone()
-
+ 
         if result:
-            username, encrypted_password, iv = result
+            encrypted_password, iv = result
             decrypted_password = self.encryption_manager.decrypt_password(
                 encrypted_password, iv, base64.urlsafe_b64decode(self.user[1])
             )
@@ -664,6 +668,14 @@ class MainWindow:
 
     def logout(self):
         self.master.destroy()
+
+    def populate_password_list(self):
+        self.tree.delete(*self.tree.get_children())  # Clear existing entries
+        passwords = self.db_manager.execute_query(
+            "SELECT service, username FROM passwords WHERE user_id = ?", (self.user[0],)
+        ).fetchall()
+        for service, username in passwords:
+            self.tree.insert("", "end", values=(service, username))
 
 
 class PasswordManagerApp:
