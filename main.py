@@ -600,16 +600,13 @@ class MainWindow:
         )
 
     def setup_retrieve_password_tab(self):
-        self.tree = ttk.Treeview(self.retrieve_password_tab, columns=("Service", "Username"), show="headings")
+        self.tree = ttk.Treeview(self.retrieve_password_tab, columns=("Service",), show="headings")
         self.tree.heading("Service", text="Service")
-        self.tree.heading("Username", text="Username")
         self.tree.bind("<Double-1>", self.retrieve_password)  # Bind double-click event
         self.tree.grid(column=0, row=0, columnspan=2, sticky="nsew", pady=5)
- 
         self.retrieve_result = ttk.Label(self.retrieve_password_tab, text="", font=("Arial", 12))
         self.retrieve_result.grid(column=0, row=1, columnspan=2, pady=10)
- 
-        # Populate the treeview with stored passwords
+        # Populate the treeview with stored services
         self.populate_password_list()
 
     def generate_password(self):
@@ -645,24 +642,24 @@ class MainWindow:
         if not selected_item:
             messagebox.showerror("Error", "Please select a service")
             return
- 
-        service, username = self.tree.item(selected_item, "values")
-        result = self.db_manager.execute_query(
+
+        service = self.tree.item(selected_item, "values")[0]
+        results = self.db_manager.execute_query(
             """
-            SELECT password, iv FROM passwords
-            WHERE user_id = ? AND service = ? AND username = ?
+            SELECT username, password, iv FROM passwords
+            WHERE user_id = ? AND service = ?
             """,
-            (self.user[0], service, username),
-        ).fetchone()
- 
-        if result:
-            encrypted_password, iv = result
-            decrypted_password = self.encryption_manager.decrypt_password(
-                encrypted_password, iv, base64.urlsafe_b64decode(self.user[1])
+            (self.user[0], service),
+        ).fetchall()
+
+        if results:
+            credentials = "\n\n".join(
+                [
+                    f"Username: {username}\nPassword: {self.encryption_manager.decrypt_password(encrypted_password, iv, base64.urlsafe_b64decode(self.user[1]))}"
+                    for username, encrypted_password, iv in results
+                ]
             )
-            self.retrieve_result.config(
-                text=f"Username: {username}\nPassword: {decrypted_password}"
-            )
+            self.retrieve_result.config(text=credentials)
         else:
             messagebox.showerror("Error", "No password found for this service")
 
@@ -671,11 +668,11 @@ class MainWindow:
 
     def populate_password_list(self):
         self.tree.delete(*self.tree.get_children())  # Clear existing entries
-        passwords = self.db_manager.execute_query(
-            "SELECT service, username FROM passwords WHERE user_id = ?", (self.user[0],)
+        services = self.db_manager.execute_query(
+            "SELECT DISTINCT service FROM passwords WHERE user_id = ?", (self.user[0],)
         ).fetchall()
-        for service, username in passwords:
-            self.tree.insert("", "end", values=(service, username))
+        for (service,) in services:
+            self.tree.insert("", "end", values=(service,))
 
 
 class PasswordManagerApp:
