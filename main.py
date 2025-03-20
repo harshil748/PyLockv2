@@ -68,7 +68,7 @@ class DatabaseManager:
                 username TEXT,
                 password TEXT,
                 iv TEXT,
-                FOREIGN KEY(user_id) REFERENCES users(id)
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
             )
         """
         )
