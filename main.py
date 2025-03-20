@@ -570,6 +570,7 @@ class MainWindow:
         ttk.Button(self.frame, text="Logout", command=self.logout).grid(
             column=1, row=1, sticky=tk.E, pady=10
         )
+        self.start_auto_logout_timer()
 
     def setup_add_password_tab(self):
         ttk.Label(self.add_password_tab, text="Service:").grid(
@@ -664,7 +665,16 @@ class MainWindow:
             messagebox.showerror("Error", "No password found for this service")
 
     def logout(self):
+        if hasattr(self, "auto_logout_timer"):
+            self.master.after_cancel(self.auto_logout_timer)
         self.master.destroy()
+        
+    def start_auto_logout_timer(self):
+        self.auto_logout_timer = self.master.after(300000, self.auto_logout)  # 300,000 ms = 5 minutes
+        
+    def auto_logout(self):
+        messagebox.showinfo("Session Expired", "Your session has expired. Logging out.")
+        self.logout()
 
     def populate_password_list(self):
         self.tree.delete(*self.tree.get_children())  # Clear existing entries
