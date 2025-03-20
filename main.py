@@ -148,39 +148,6 @@ class AuthManager:
         ]
         return " ".join(secrets.choice(words) for _ in range(6))
 
-    @staticmethod
-    def send_special_sentence_email(receiver_email, sentence):
-        subject = "Your Password Manager Special Sentence"
-        body = f"""
-        Your special sentence is: {sentence}
-        
-        Please store this sentence securely. You can use it to reset your password if you forget it.
-        """
-
-        msg = MIMEMultipart()
-        msg["From"] = SENDER_EMAIL
-        msg["To"] = receiver_email
-        msg["Subject"] = subject
-        msg.attach(MIMEText(body, "plain"))
-
-        try:
-            print(f"Attempting to send email to {receiver_email}")
-            server = smtplib.SMTP("smtp.gmail.com", 587)
-            server.ehlo()  # Identify to SMTP server
-            server.starttls()  # Secure connection
-            print("Logging into SMTP server...")
-            server.login(SENDER_EMAIL, SENDER_PASSWORD)
-            print("Sending email...")
-            server.send_message(msg)
-            server.quit()
-            print("Email sent successfully")
-            return True
-        except Exception as e:
-            print(f"Email failed to send: {e}")
-            messagebox.showerror(
-                "Error", f"Failed to send special sentence email: {str(e)}"
-            )
-            return False
 
 
 class EncryptionManager:
@@ -498,8 +465,6 @@ class RegistrationWindow:
                 (verification_code, username),
             )
 
-            # Comment out the email sending code - we'll display it after verification instead
-            # self.auth_manager.send_special_sentence_email(email, special_sentence)
 
             # Close registration window
             self.master.destroy()
