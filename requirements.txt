@@ -1,0 +1,5 @@
+tkinter
+cryptography
+smtplib
+email
+sqlite3
