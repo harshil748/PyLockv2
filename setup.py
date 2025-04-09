@@ -1,7 +1,7 @@
 from setuptools import setup
 
-APP = ["main.py"]  # Replace with your main filename if different
-DATA_FILES = ["passwords.db"]  # Your SQLite DB (adjust name if needed)
+APP = ["main.py"]  
+DATA_FILES = ["passwords.db"]  
 OPTIONS = {
     "argv_emulation": True,
     "packages": [
@@ -18,8 +18,8 @@ OPTIONS = {
         "base64",
         "smtplib",
     ],
-    "resources": ["database.db"],
-    "iconfile": "icon.icns",  # Optional - include your own icon file or remove this line
+    "resources": ["passwords.db"],
+    "iconfile": "icon.icns",
 }
 
 setup(
