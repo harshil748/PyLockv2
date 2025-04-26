@@ -13,6 +13,25 @@ import base64
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+import sys
+
+# Handle correct path for bundled app
+if getattr(sys, 'frozen', False):
+    # If running inside .app or .exe
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    # If running normally (debugging)
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+db_path = os.path.join(BASE_DIR, "passwords.db")
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for development and for PyInstaller bundle """
+    try:
+        base_path = sys._MEIPASS  # PyInstaller's temporary folder
+    except Exception:
+        base_path = os.path.abspath(".")  # Current directory (for development)
+    return os.path.join(base_path, relative_path)
 
 backend = default_backend()
 
@@ -23,7 +42,7 @@ SENDER_PASSWORD = "haub ylen jpof ypse"
 
 class DatabaseManager:
     def __init__(self):
-        self.conn = sqlite3.connect("passwords.db")
+        self.conn = sqlite3.connect(resource_path(db_path))
         self.create_tables()
 
     def create_tables(self):
