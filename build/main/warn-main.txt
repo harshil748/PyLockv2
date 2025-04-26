@@ -19,4 +19,5 @@ excluded module named _frozen_importlib - imported by importlib (optional), impo
 missing module named winreg - imported by importlib._bootstrap_external (conditional)
 missing module named nt - imported by os (delayed, conditional, optional), ntpath (optional), shutil (conditional), importlib._bootstrap_external (conditional)
 missing module named _winapi - imported by encodings (delayed, conditional, optional), ntpath (optional), shutil (conditional), subprocess (conditional)
+missing module named bcrypt - imported by cryptography.hazmat.primitives.serialization.ssh (optional)
 missing module named msvcrt - imported by subprocess (optional)
