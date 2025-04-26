@@ -564,11 +564,12 @@ class ResetPasswordWindow:
 
 
 class MainWindow:
-    def __init__(self, master, db_manager, encryption_manager, user):
+    def __init__(self, master, db_manager, encryption_manager, user, on_logout=None):
         self.master = master
         self.db_manager = db_manager
         self.encryption_manager = encryption_manager
         self.user = user
+        self.on_logout = on_logout  # Store the logout callback
 
         self.master.title("Password Manager")
         self.frame = ttk.Frame(self.master, padding="10")
@@ -624,10 +625,79 @@ class MainWindow:
         self.tree.heading("Service", text="Service")
         self.tree.bind("<Double-1>", self.retrieve_password)  # Bind double-click event
         self.tree.grid(column=0, row=0, columnspan=2, sticky="nsew", pady=5)
+        
+        # Add buttons frame
+        buttons_frame = ttk.Frame(self.retrieve_password_tab)
+        buttons_frame.grid(column=0, row=1, columnspan=2, sticky="ew", pady=5)
+        
+        # Add Edit and Delete buttons
+        ttk.Button(buttons_frame, text="Edit Password", command=self.edit_password).pack(side=tk.LEFT, padx=5)
+        ttk.Button(buttons_frame, text="Delete Password", command=self.delete_password).pack(side=tk.LEFT, padx=5)
+        
         self.retrieve_result = ttk.Label(self.retrieve_password_tab, text="", font=("Arial", 12))
-        self.retrieve_result.grid(column=0, row=1, columnspan=2, pady=10)
+        self.retrieve_result.grid(column=0, row=2, columnspan=2, pady=10)
+        
         # Populate the treeview with stored services
         self.populate_password_list()
+        
+    def edit_password(self):
+        selected_item = self.tree.selection()
+        if not selected_item:
+            messagebox.showerror("Error", "Please select a service to edit")
+            return
+            
+        service = self.tree.item(selected_item, "values")[0]
+        results = self.db_manager.execute_query(
+            """
+            SELECT id, username, password, iv FROM passwords
+            WHERE user_id = ? AND service = ?
+            """,
+            (self.user[0], service),
+        ).fetchall()
+        
+        if results:
+            for password_id, username, encrypted_password, iv in results:
+                decrypted_password = self.encryption_manager.decrypt_password(
+                    encrypted_password, 
+                    iv, 
+                    base64.urlsafe_b64decode(self.user[1])
+                )
+                edit_window = tk.Toplevel(self.master)
+                EditPasswordWindow(
+                    edit_window,
+                    self.db_manager,
+                    self.encryption_manager,
+                    self.user,
+                    password_id,
+                    service,
+                    username,
+                    decrypted_password,
+                    self.populate_password_list
+                )
+                break  # Edit one password at a time
+        else:
+            messagebox.showerror("Error", "No password found for this service")
+
+    def delete_password(self):
+        selected_item = self.tree.selection()
+        if not selected_item:
+            messagebox.showerror("Error", "Please select a service to delete")
+            return
+            
+        service = self.tree.item(selected_item, "values")[0]
+        
+        # Ask for confirmation
+        if messagebox.askyesno("Confirm Deletion", f"Are you sure you want to delete all passwords for {service}?"):
+            self.db_manager.execute_query(
+                """
+                DELETE FROM passwords
+                WHERE user_id = ? AND service = ?
+                """,
+                (self.user[0], service),
+            )
+            messagebox.showinfo("Success", f"Passwords for {service} deleted successfully")
+            self.populate_password_list()
+            self.retrieve_result.config(text="")
 
     def generate_password(self):
         chars = string.ascii_letters + string.digits + "!@#$%^&*()"
@@ -656,6 +726,9 @@ class MainWindow:
         self.service_entry.delete(0, tk.END)
         self.username_entry.delete(0, tk.END)
         self.password_entry.delete(0, tk.END)
+        
+        # Refresh the password list in the retrieve tab
+        self.populate_password_list()
 
     def retrieve_password(self, event=None):
         selected_item = self.tree.selection()
@@ -686,10 +759,12 @@ class MainWindow:
     def logout(self):
         if hasattr(self, "auto_logout_timer"):
             self.master.after_cancel(self.auto_logout_timer)
-        self.master.destroy()
         
-    def start_auto_logout_timer(self):
-        self.auto_logout_timer = self.master.after(300000, self.auto_logout)  # 300,000 ms = 5 minutes
+        # If we have a logout callback, use it; otherwise, just destroy the window
+        if self.on_logout:
+            self.on_logout()
+        else:
+            self.master.destroy()
         
     def auto_logout(self):
         messagebox.showinfo("Session Expired", "Your session has expired. Logging out.")
@@ -702,6 +777,77 @@ class MainWindow:
         ).fetchall()
         for (service,) in services:
             self.tree.insert("", "end", values=(service,))
+
+
+class EditPasswordWindow:
+    def __init__(self, master, db_manager, encryption_manager, user, password_id, service, username, password, on_update):
+        self.master = master
+        self.db_manager = db_manager
+        self.encryption_manager = encryption_manager
+        self.user = user
+        self.password_id = password_id
+        self.on_update = on_update
+        
+        self.master.title(f"Edit Password - {service}")
+        self.frame = ttk.Frame(self.master, padding="10")
+        self.frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        ttk.Label(self.frame, text="Service:").grid(column=0, row=0, sticky=tk.W, pady=5)
+        self.service_entry = ttk.Entry(self.frame, width=30)
+        self.service_entry.insert(0, service)
+        self.service_entry.grid(column=1, row=0, sticky=(tk.W, tk.E), pady=5)
+        
+        ttk.Label(self.frame, text="Username:").grid(column=0, row=1, sticky=tk.W, pady=5)
+        self.username_entry = ttk.Entry(self.frame, width=30)
+        self.username_entry.insert(0, username)
+        self.username_entry.grid(column=1, row=1, sticky=(tk.W, tk.E), pady=5)
+        
+        ttk.Label(self.frame, text="Password:").grid(column=0, row=2, sticky=tk.W, pady=5)
+        self.password_entry = ttk.Entry(self.frame, width=30)
+        self.password_entry.insert(0, password)
+        self.password_entry.grid(column=1, row=2, sticky=(tk.W, tk.E), pady=5)
+        
+        ttk.Button(self.frame, text="Generate New Password", command=self.generate_password).grid(
+            column=1, row=3, sticky=tk.E, pady=5
+        )
+        
+        button_frame = ttk.Frame(self.frame)
+        button_frame.grid(column=0, row=4, columnspan=2, sticky=tk.E, pady=10)
+        
+        ttk.Button(button_frame, text="Update", command=self.update_password).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Cancel", command=self.master.destroy).pack(side=tk.LEFT)
+    
+    def generate_password(self):
+        chars = string.ascii_letters + string.digits + "!@#$%^&*()"
+        password = "".join(secrets.choice(chars) for _ in range(16))
+        self.password_entry.delete(0, tk.END)
+        self.password_entry.insert(0, password)
+    
+    def update_password(self):
+        service = self.service_entry.get()
+        username = self.username_entry.get()
+        password = self.password_entry.get()
+        
+        if not all([service, username, password]):
+            messagebox.showerror("Error", "All fields are required")
+            return
+            
+        encrypted_password, iv = self.encryption_manager.encrypt_password(
+            password, base64.urlsafe_b64decode(self.user[1])
+        )
+        
+        self.db_manager.execute_query(
+            """
+            UPDATE passwords
+            SET service = ?, username = ?, password = ?, iv = ?
+            WHERE id = ?
+            """,
+            (service, username, encrypted_password, iv, self.password_id),
+        )
+        
+        messagebox.showinfo("Success", "Password updated successfully")
+        self.on_update()  # Refresh the password list
+        self.master.destroy()
 
 
 class PasswordManagerApp:
@@ -721,6 +867,10 @@ class PasswordManagerApp:
         self.show_login_window()
 
     def show_login_window(self):
+        # Clear any existing widgets before showing login
+        for widget in self.root.winfo_children():
+            widget.destroy()
+            
         LoginWindow(
             self.root, self.db_manager, self.auth_manager, self.on_login_success
         )
@@ -728,7 +878,8 @@ class PasswordManagerApp:
     def on_login_success(self, user):
         for widget in self.root.winfo_children():
             widget.destroy()
-        MainWindow(self.root, self.db_manager, self.encryption_manager, user)
+        # Pass the show_login_window method as the logout callback
+        MainWindow(self.root, self.db_manager, self.encryption_manager, user, self.show_login_window)
 
     def run(self):
         self.root.mainloop()
